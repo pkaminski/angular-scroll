@@ -21,6 +21,9 @@ var duScroll = angular.module('duScroll', [
   .value('duScrollDuration', 350)
   //Scrollspy debounce interval, set to 0 to disable
   .value('duScrollSpyWait', 100)
+  //Scrollspy forced refresh interval, use if your content changes or reflows without scrolling.
+  //0 to disable
+  .value('duScrollSpyRefreshInterval', 0)
   //Wether or not multiple scrollspies can be active at once
   .value('duScrollGreedy', false)
   //Default offset for smoothScroll directive
@@ -254,7 +257,7 @@ angular.module('duScroll.requestAnimation', ['duScroll.polyfill'])
 
 
 angular.module('duScroll.spyAPI', ['duScroll.scrollContainerAPI'])
-.factory('spyAPI', ["$rootScope", "$timeout", "$window", "$document", "scrollContainerAPI", "duScrollGreedy", "duScrollSpyWait", "duScrollBottomSpy", "duScrollActiveClass", function($rootScope, $timeout, $window, $document, scrollContainerAPI, duScrollGreedy, duScrollSpyWait, duScrollBottomSpy, duScrollActiveClass) {
+.factory('spyAPI', ["$rootScope", "$timeout", "$interval", "$window", "$document", "scrollContainerAPI", "duScrollGreedy", "duScrollSpyWait", "duScrollSpyRefreshInterval", "duScrollBottomSpy", "duScrollActiveClass", function($rootScope, $timeout, $interval, $window, $document, scrollContainerAPI, duScrollGreedy, duScrollSpyWait, duScrollSpyRefreshInterval, duScrollBottomSpy, duScrollActiveClass) {
   'use strict';
 
   var createScrollHandler = function(context) {
@@ -300,7 +303,7 @@ angular.module('duScroll.spyAPI', ['duScroll.scrollContainerAPI'])
         toBeActive = toBeActive.spy;
       }
       if(currentlyActive === toBeActive || (duScrollGreedy && !toBeActive)) return;
-      if(currentlyActive) {
+      if(currentlyActive && currentlyActive.$element) {
         currentlyActive.$element.removeClass(duScrollActiveClass);
         $rootScope.$broadcast(
           'duScrollspy:becameInactive',
@@ -360,6 +363,9 @@ angular.module('duScroll.spyAPI', ['duScroll.scrollContainerAPI'])
   var destroyContext = function($scope) {
     var id = $scope.$id;
     var context = contexts[id], container = context.container;
+    if(context.intervalPromise) {
+      $interval.cancel(context.intervalPromise);
+    }
     if(container) {
       container.off('scroll', context.handler);
     }
@@ -411,6 +417,9 @@ angular.module('duScroll.spyAPI', ['duScroll.scrollContainerAPI'])
         context.container.off('scroll', context.handler);
       }
       context.container = scrollContainerAPI.getContainer(spy.$scope);
+      if (duScrollSpyRefreshInterval && !context.intervalPromise) {
+        context.intervalPromise = $interval(context.handler, duScrollSpyRefreshInterval, 0, false);
+      }
       context.container.on('scroll', context.handler).triggerHandler('scroll');
     }
   };
